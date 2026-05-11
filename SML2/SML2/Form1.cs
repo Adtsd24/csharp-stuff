@@ -16,14 +16,27 @@ namespace SML2
         private String javaMaxMem;
         private String username;
         private String arguments;
+        private String exePath;
+        private String rootPath;
+        private Boolean isDebug = false;
         public SML2()
         {
             InitializeComponent();
         }
         private void SML2_Load(object sender, EventArgs e)
         {
+            ohKórva();
+            exePath = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
+            if (File.Exists(exePath + "\\portable.txt") || File.Exists(exePath + "\\portable.txt.txt"))
+            {
+                rootPath = exePath + "\\";
+            }
+            else
+            {
+                rootPath = "C:\\SML2\\";
+            }
             List<string> versions = new List<string>();
-            Array versionsIni = File.ReadAllLines("C:\\SML2\\versions.ini");
+            Array versionsIni = File.ReadAllLines(rootPath + "versions.ini");
             foreach (string item in versionsIni)
             {
                 if (item.StartsWith(";") || item.StartsWith("["))
@@ -34,15 +47,38 @@ namespace SML2
                     versions.Add(temporaryString[0]);
                 }
             }
-            var config = File.ReadAllLines("C:\\SML2\\config.ini");
+            
+            var config = File.ReadAllLines(rootPath + "config.ini");
+            /*
             var javaMinMemIni = config[2].Split('=');
             var javaMaxMemIni = config[3].Split('=');
             var usernameIni = config[4].Split('=');
             javaMinMem = javaMinMemIni[1];
             javaMaxMem = javaMaxMemIni[1];
             username = usernameIni[1];
+            */
+            foreach (string conf in config)
+            {
+                if (conf.Split('=')[0] == "JavaMinMem")
+                {
+                    javaMinMem = conf.Split('=')[1];
+                }
+                if (conf.Split('=')[0] == "JavaMaxMem")
+                {
+                    javaMaxMem = conf.Split('=')[1];
+                }
+                if (conf.Split('=')[0] == "Username")
+                {
+                    username = conf.Split('=')[1];
+                }
+                if (conf.Split('=')[0] == "Debug")
+                {
+                    try { isDebug = Convert.ToBoolean(conf.Split('=')[1]); }
+                    catch (System.FormatException) { MessageBox.Show(null, "Your \"Debug\" variable has an invalid value. It can only be either \"true\" or \"false\". SML2 will now close.", "Error!", MessageBoxButtons.OK, MessageBoxIcon.Error); Application.Exit(); }
+                }
+            }
             if (javaMinMem == "" || javaMaxMem == "" || username == "") {
-                MessageBox.Show("Error: Configuration file not properly set up or corrupted. Please make sure it is set up correctly and restart SML2.\n(Check C:\\SML2\\config.ini for config file)");
+                MessageBox.Show(null, "Configuration file not properly set up or corrupted. Please make sure it is set up correctly and restart SML2.\n(Check config.ini in installation directory for config file!)", "Error!");
                 Application.Exit();
             }
             label2.Text = username;
@@ -57,35 +93,46 @@ namespace SML2
         private void button1_Click(object sender, EventArgs e)
         {
             String versionName = comboBox1.SelectedItem.ToString();
-            String jarPath = String.Format("C:\\SML2\\Versions\\{0}\\{0}.jar", versionName);
-            String nativesPath = String.Format("C:\\SML2\\Versions\\{0}\\natives", versionName);
-            String libPath = String.Format("C:\\SML2\\Versions\\{0}\\libraries\\*", versionName);
-            String classPath = String.Format("{0}{1}{2}", libPath, Path.PathSeparator, jarPath);
-            String assetsPath = String.Format("C:\\SML2\\Versions\\{0}\\assets", versionName);
-            var instanceConfig = File.ReadAllLines(String.Format("C:\\SML2\\Versions\\{0}\\version.ini", versionName));
-            if (instanceConfig.Length > 3)
+            String jarPath = "";
+            String libPath = "";
+            String[] instanceConfig = File.ReadAllLines(rootPath + "Versions\\" + versionName + "\\version.ini");
+            String extraClassPath = "";
+            String entryName = "";
+            foreach (string conf in instanceConfig)
             {
-                if (instanceConfig[3] != null && instanceConfig[3].StartsWith("CustomExtraClassPath="))
+                if (conf.Split('=')[0] == "JarFile")
                 {
-                    var extraClassPath = instanceConfig[3].Split('=');
-                    String realExtraClassPath = extraClassPath[1];
-                    classPath = classPath + String.Format(";{0}\\*", realExtraClassPath);
-                    var filesInDir = Directory.GetFiles(realExtraClassPath);
+                    jarPath = conf.Split('=')[1];
+                }
+                if (conf.Split('=')[0] == "Libraries")
+                {
+                    libPath = conf.Split('=')[1] + "\\*";
+                }
+                if (conf.Split('=')[0] == "CustomExtraClassPath")
+                {
+                    extraClassPath = conf.Split('=')[1];
+                    var filesInDir = Directory.GetFiles(extraClassPath);
                     foreach (string file in filesInDir)
                     {
-                        if (file.EndsWith(".zip")) {
+                        if (file.EndsWith(".zip"))
+                        {
                             MessageBox.Show(String.Format("File {0} ends with .zip. It will not be loaded by Java. Please rename it to have a .jar extension for Java to properly load it. This message will appear for every file with such issues.", file));
                         }
                     }
                 }
+                if (conf.Split('=')[0] == "CustomEntryName")
+                {
+                    entryName = conf.Split('=')[1];
+                }
             }
-            String entryName;
-            if (instanceConfig.Length >= 5) { entryName = (instanceConfig[4].Split('='))[1]; } else { entryName = "net.minecraft.client.Minecraft"; }
+            String nativesPath = String.Format(rootPath + "Versions\\{0}\\natives", versionName);
+            if (libPath == "") { libPath = String.Format(rootPath + "Versions\\{0}\\libraries\\*", versionName); }
+            String classPath = String.Format("{0}{1}{2}", libPath, Path.PathSeparator, jarPath);
+            if (extraClassPath != "") { classPath += ";" + extraClassPath; }
+            String assetsPath = String.Format(rootPath + "Versions\\{0}\\assets", versionName);
+            if (entryName == "") { entryName = "net.minecraft.client.Minecraft"; }
             arguments = String.Format("-Xms{0} -Xmx{1} -Djava.library.path=\"{2}\" -Dfml.ignoreInvalidMinecraftCertificates=true -Dfml.ignorePatchDiscrepancies=true -Dhttp.proxyHost=betacraft.uk -Djava.util.Arrays.useLegacyMergeSort=true -cp \"{3}\" {4} {5} --gameDir \"C:\\SML2\\Versions\\{6}\" --assetsDir {7}", javaMinMem, javaMaxMem, nativesPath, classPath, entryName, username, versionName, assetsPath);
             arguments += " -noverify";
-            string[] config = File.ReadAllLines("C:\\SML2\\config.ini");
-            var isDebugIni = config[5].Split('=');
-            bool isDebug = Convert.ToBoolean(isDebugIni[1]);
             if (isDebug == true) MessageBox.Show(arguments);
             launchGame();
         }
@@ -96,8 +143,8 @@ namespace SML2
             ProcessStartInfo javaGameProcess = new ProcessStartInfo();
             javaGameProcess.FileName = "java.exe";
             javaGameProcess.Arguments = arguments;
-            String workPath = String.Format("C:\\SML2\\Versions\\{0}\\", comboBox1.SelectedItem.ToString());
-            javaGameProcess.EnvironmentVariables["APPDATA"] = String.Format("C:\\SML2\\Versions\\{0}", comboBox1.SelectedItem.ToString());
+            String workPath = String.Format(rootPath + "Versions\\{0}\\", comboBox1.SelectedItem.ToString());
+            javaGameProcess.EnvironmentVariables["APPDATA"] = String.Format(rootPath + "Versions\\{0}", comboBox1.SelectedItem.ToString());
             javaGameProcess.UseShellExecute = false;
             javaGameProcess.WorkingDirectory = workPath;
             javaGameProcess.RedirectStandardOutput = true;
@@ -117,13 +164,26 @@ namespace SML2
         {
             if (this.InvokeRequired)
             {
-                this.Invoke(new Action<string>(appendToLog), new object[] { text });
+                this.Invoke(new Action<string>(appendToLog), new object[] { text }); // idk what the fuck this does
                 return;
             }
             if (!String.IsNullOrEmpty(text))
             {
                 textBox1.AppendText(text + Environment.NewLine);
                 textBox1.ScrollToCaret();
+            }
+        }
+        private void ohKórva() {
+            String[] blacklist = {"WeMod", "Wand", "WeModAuxiliaryService"};
+            foreach (string a in blacklist)
+            {
+                Process[] IsDetected = Process.GetProcessesByName(a); // screw you
+                foreach (Process b in IsDetected)
+                {
+                    MessageBox.Show("Access denied.\nAre you trying to search for the following terms:\n- What is Reddit\n- How do I uninstall a cheat client\n- SML2 access denied error how to fix", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    Application.Exit();
+                }
+
             }
         }
     }
