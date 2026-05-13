@@ -18,6 +18,9 @@ namespace SML2
         private String arguments;
         private String exePath;
         private String rootPath;
+        private String proxyHost = "";
+        private String proxyPort = "";
+        private String fakeUUID = "";
         private Boolean isDebug = false;
         public SML2()
         {
@@ -76,6 +79,10 @@ namespace SML2
                     try { isDebug = Convert.ToBoolean(conf.Split('=')[1]); }
                     catch (System.FormatException) { MessageBox.Show(null, "Your \"Debug\" variable has an invalid value. It can only be either \"true\" or \"false\". SML2 will now close.", "Error!", MessageBoxButtons.OK, MessageBoxIcon.Error); Application.Exit(); }
                 }
+                if (conf.Split('=')[0] == "FakeUUID")
+                {
+                    fakeUUID = conf.Split('=')[1];
+                }
             }
             if (javaMinMem == "" || javaMaxMem == "" || username == "") {
                 MessageBox.Show(null, "Configuration file not properly set up or corrupted. Please make sure it is set up correctly and restart SML2.\n(Check config.ini in installation directory for config file!)", "Error!");
@@ -98,6 +105,12 @@ namespace SML2
             String[] instanceConfig = File.ReadAllLines(rootPath + "Versions\\" + versionName + "\\version.ini");
             String extraClassPath = "";
             String entryName = "";
+            Boolean needFakeUUID = false;
+            Boolean needVersionFlag = false;
+            Boolean allowLaunch = true;
+            Boolean needUsernameFlag = false;
+            String assetIndex = "";
+            Boolean needUserProperties = false;
             foreach (string conf in instanceConfig)
             {
                 if (conf.Split('=')[0] == "JarFile")
@@ -124,6 +137,38 @@ namespace SML2
                 {
                     entryName = conf.Split('=')[1];
                 }
+                if (conf.Split('=')[0] == "ProxyHost")
+                {
+                    proxyHost = String.Format("-Dhttp.proxyHost={0}", conf.Split('=')[1]);
+                }
+                if (conf.Split('=')[0] == "ProxyPort")
+                {
+                    proxyPort = String.Format("-Dhttp.proxyPort={0}", conf.Split('=')[1]);
+                }
+                if (conf.Split('=')[0] == "NeedFakeUUID")
+                {
+                    try { needFakeUUID = Convert.ToBoolean(conf.Split('=')[1]); }
+                    catch (FormatException e1) { MessageBox.Show(null, "Error: this instance has a NeedFakeUUID value that is not \"false\" or \"true\". Please change this to fix the instance.", "Invalid instance config"); allowLaunch = false; }
+                }
+                if (conf.Split('=')[0] == "NeedVersionFlag")
+                {
+                    try { needVersionFlag = Convert.ToBoolean(conf.Split('=')[1]); }
+                    catch (FormatException e1) { MessageBox.Show(null, "Error: this instance has a NeedVersionFlag value that is not \"false\" or \"true\". Please change this to fix the instance.", "Invalid instance config"); allowLaunch = false; }
+                }
+                if (conf.Split('=')[0] == "NeedUsernameFlag")
+                {
+                    try { needUsernameFlag = Convert.ToBoolean(conf.Split('=')[1]); }
+                    catch (FormatException e1) { MessageBox.Show(null, "Error: this instance has a NeedUsernameFlag value that is not \"false\" or \"true\". Please change this to fix the instance.", "Invalid instance config"); allowLaunch = false; }
+                }
+                if (conf.Split('=')[0] == "AssetIndex")
+                {
+                    assetIndex = conf.Split('=')[1];
+                }
+                if (conf.Split('=')[0] == "NeedUserProperties")
+                {
+                    try { needUserProperties = Convert.ToBoolean(conf.Split('=')[1]); }
+                    catch (FormatException e1) { MessageBox.Show(null, "Error: this instance has a NeedUserProperties value that is not \"false\" or \"true\". Please change this to fix the instance.", "Invalid instance config"); allowLaunch = false; }
+                }
             }
             String nativesPath = String.Format(rootPath + "Versions\\{0}\\natives", versionName);
             if (libPath == "") { libPath = String.Format(rootPath + "Versions\\{0}\\libraries\\*", versionName); }
@@ -131,10 +176,15 @@ namespace SML2
             if (extraClassPath != "") { classPath += ";" + extraClassPath; }
             String assetsPath = String.Format(rootPath + "Versions\\{0}\\assets", versionName);
             if (entryName == "") { entryName = "net.minecraft.client.Minecraft"; }
-            arguments = String.Format("-Xms{0} -Xmx{1} -Djava.library.path=\"{2}\" -Dfml.ignoreInvalidMinecraftCertificates=true -Dfml.ignorePatchDiscrepancies=true -Dhttp.proxyHost=betacraft.uk -Djava.util.Arrays.useLegacyMergeSort=true -cp \"{3}\" {4} {5} --gameDir \"C:\\SML2\\Versions\\{6}\" --assetsDir {7}", javaMinMem, javaMaxMem, nativesPath, classPath, entryName, username, versionName, assetsPath);
+            arguments = String.Format("-Xms{0} -Xmx{1} -Djava.library.path=\"{2}\" -Dfml.ignoreInvalidMinecraftCertificates=true -Dfml.ignorePatchDiscrepancies=true {8} {9} -Djava.util.Arrays.useLegacyMergeSort=true -cp \"{3}\" {4} {5} --gameDir \"C:\\SML2\\Versions\\{6}\" --assetsDir {7}", javaMinMem, javaMaxMem, nativesPath, classPath, entryName, username, versionName, assetsPath, proxyHost, proxyPort);
             arguments += " -noverify";
+            if (needVersionFlag) { arguments += " --version " + versionName; }
+            if (needFakeUUID) { arguments += " --uuid " + fakeUUID; arguments += " --accessToken GET_OUT_OF_MY_HOUSE"; }
+            if (needUsernameFlag) { arguments += " --username " + username; }
+            if (assetIndex != "") { arguments += " --assetIndex " + assetIndex; }
+            if (needUserProperties) { arguments += " --userProperties {}"; }
             if (isDebug == true) MessageBox.Show(arguments);
-            launchGame();
+            if (allowLaunch) { launchGame(); }
         }
 
         private void launchGame()
@@ -164,7 +214,7 @@ namespace SML2
         {
             if (this.InvokeRequired)
             {
-                this.Invoke(new Action<string>(appendToLog), new object[] { text }); // idk what the fuck this does
+                this.Invoke(new Action<string>(appendToLog), new object[] { text }); // i STILL dont know what the fuck this does
                 return;
             }
             if (!String.IsNullOrEmpty(text))
